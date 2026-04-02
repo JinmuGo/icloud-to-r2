@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-s3"
 import { globby } from "globby"
 import { getPlaiceholder } from "plaiceholder"
+import sharp from "sharp"
 
 // --- Configuration ---
 
@@ -24,7 +25,7 @@ const GITHUB_WORKFLOW = process.env.GITHUB_WORKFLOW ?? "astro.yaml"
 
 const SYNC_INTERVAL = Number(process.env.SYNC_INTERVAL ?? "7200") * 1000
 
-const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
 
 /** @type {Record<string, string>} */
 const CONTENT_TYPES = {
@@ -114,12 +115,28 @@ async function hasMetadata(key) {
 }
 
 /**
+ * Convert HEIC to JPEG buffer using sharp.
+ * @param {Buffer} buffer
+ * @returns {Promise<Buffer>}
+ */
+async function convertHeicToJpeg(buffer) {
+  return sharp(buffer).jpeg({ quality: 90 }).toBuffer()
+}
+
+/**
  * Extract image metadata using plaiceholder.
  * Handles EXIF orientation for correct width/height.
+ * Converts HEIC to JPEG automatically.
  * @param {string} filePath
  */
 async function getImageMeta(filePath) {
-  const buffer = await fs.readFile(filePath)
+  let buffer = await fs.readFile(filePath)
+  const isHeic = path.extname(filePath).toLowerCase() === ".heic"
+
+  if (isHeic) {
+    buffer = await convertHeicToJpeg(buffer)
+  }
+
   const {
     base64,
     metadata: { width, height, orientation },
@@ -142,13 +159,14 @@ async function uploadImage(filePath, r2Key) {
   try {
     const { width, height, blur, buffer } = await getImageMeta(filePath)
     const ext = path.extname(filePath).toLowerCase()
+    const contentType = ext === ".heic" ? "image/jpeg" : (CONTENT_TYPES[ext] ?? "application/octet-stream")
 
     await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: r2Key,
         Body: buffer,
-        ContentType: CONTENT_TYPES[ext] ?? "application/octet-stream",
+        ContentType: contentType,
         Metadata: {
           width: String(width),
           height: String(height),
@@ -240,7 +258,9 @@ async function sync() {
 
   for (const relPath of localFiles) {
     const normalized = relPath.replace(/\\/g, "/")
-    const r2Key = BUCKET_PREFIX ? `${BUCKET_PREFIX}/${normalized}` : normalized
+    // HEIC files are converted to JPEG, so use .jpg extension in R2
+    const r2Path = normalized.replace(/\.heic$/i, ".jpg")
+    const r2Key = BUCKET_PREFIX ? `${BUCKET_PREFIX}/${r2Path}` : r2Path
     const absPath = path.join(PHOTOS_DIR, relPath)
 
     // Skip if already exists with metadata

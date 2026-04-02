@@ -13,7 +13,6 @@ services:
       icloudpd
       --directory /photos
       --album "${ALBUM_NAME}"
-      --convert-heic
       --skip-videos
       --watch-with-interval ${ICLOUD_INTERVAL:-3600}
       --cookie-directory /config
