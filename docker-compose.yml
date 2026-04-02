@@ -1,0 +1,34 @@
+services:
+  icloudpd:
+    image: icloudpd/icloudpd:latest
+    container_name: icloudpd
+    restart: unless-stopped
+    volumes:
+      - photos:/photos
+      - icloudpd-config:/config
+    environment:
+      - APPLE_ID=${APPLE_ID}
+      - TZ=${TZ:-Asia/Seoul}
+    command: >
+      icloudpd
+      --directory /photos
+      --album "${ALBUM_NAME}"
+      --convert-heic
+      --skip-videos
+      --watch-with-interval ${ICLOUD_INTERVAL:-3600}
+      --cookie-directory /config
+
+  sync-to-r2:
+    build: ./sync
+    container_name: sync-to-r2
+    restart: unless-stopped
+    depends_on:
+      - icloudpd
+    volumes:
+      - photos:/photos:ro
+    env_file:
+      - .env
+
+volumes:
+  photos:
+  icloudpd-config:
