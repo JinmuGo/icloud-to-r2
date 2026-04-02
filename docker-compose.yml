@@ -1,21 +1,24 @@
 services:
   icloudpd:
-    image: icloudpd/icloudpd:latest
+    image: boredazfcuk/icloudpd:latest
     container_name: icloudpd
     restart: unless-stopped
     volumes:
-      - photos:/photos
+      - icloudpd-photos:/home/user/iCloud
       - icloudpd-config:/config
     environment:
-      - APPLE_ID=${APPLE_ID}
+      - apple_id=${APPLE_ID}
       - TZ=${TZ:-Asia/Seoul}
-    command: >
-      icloudpd
-      --directory /photos
-      --album "${ALBUM_NAME}"
-      --skip-videos
-      --watch-with-interval ${ICLOUD_INTERVAL:-3600}
-      --cookie-directory /config
+      - authentication_type=Web
+      - download_path=/home/user/iCloud
+      - download_interval=${ICLOUD_INTERVAL:-43200}
+      - photo_album=${ALBUM_NAME}
+      - skip_videos=true
+      - convert_heic_to_jpeg=true
+      - jpeg_quality=90
+      - notification_type=${NOTIFICATION_TYPE:-}
+      - telegram_token=${TELEGRAM_TOKEN:-}
+      - telegram_chat_id=${TELEGRAM_CHAT_ID:-}
 
   sync-to-r2:
     build: ./sync
@@ -24,10 +27,10 @@ services:
     depends_on:
       - icloudpd
     volumes:
-      - photos:/photos:ro
+      - icloudpd-photos:/photos:ro
     env_file:
       - .env
 
 volumes:
-  photos:
+  icloudpd-photos:
   icloudpd-config:
