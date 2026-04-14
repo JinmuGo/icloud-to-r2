@@ -4,7 +4,14 @@
 
 A Docker-based tool that automatically syncs photos from an iPhone iCloud album to Cloudflare R2.
 
-**Flow**: iPhone Album → iCloud → icloudpd (auto download) → R2 Upload → GitHub Actions Rebuild Trigger
+```mermaid
+graph LR
+    A[📱 iPhone Album] --> B[☁️ iCloud]
+    B --> C[🐳 icloudpd]
+    C -->|auto download| D[📂 Local Storage]
+    D --> E[🪣 R2 Upload]
+    E -->|workflow_dispatch| F[⚙️ GitHub Actions]
+```
 
 ## Usage
 

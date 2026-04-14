@@ -2,7 +2,14 @@
 
 iPhone iCloud 앨범의 사진을 Cloudflare R2에 자동으로 동기화하는 Docker 기반 도구.
 
-**흐름**: iPhone 앨범 → iCloud → icloudpd (자동 다운로드) → R2 업로드 → GitHub Actions 리빌드 트리거
+```mermaid
+graph LR
+    A[📱 iPhone 앨범] --> B[☁️ iCloud]
+    B --> C[🐳 icloudpd]
+    C -->|자동 다운로드| D[📂 로컬 저장소]
+    D --> E[🪣 R2 업로드]
+    E -->|workflow_dispatch| F[⚙️ GitHub Actions]
+```
 
 ## 사용법
 
