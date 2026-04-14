@@ -1,77 +1,79 @@
-# icloud-photo-sync
+# icloud-to-r2
 
-iPhone iCloud 앨범의 사진을 Cloudflare R2에 자동으로 동기화하는 Docker 기반 도구.
+[한국어](README.ko.md)
 
-**흐름**: iPhone 앨범 → iCloud → icloudpd (자동 다운로드) → R2 업로드 → GitHub Actions 리빌드 트리거
+A Docker-based tool that automatically syncs photos from an iPhone iCloud album to Cloudflare R2.
 
-## 사용법
+**Flow**: iPhone Album → iCloud → icloudpd (auto download) → R2 Upload → GitHub Actions Rebuild Trigger
 
-### 1. 환경변수 설정
+## Usage
+
+### 1. Configure Environment Variables
 
 ```bash
 cp .env.example .env
-# .env 파일을 편집하여 값 입력
+# Edit .env and fill in the values
 ```
 
-### 2. iCloud 인증 (최초 1회)
+### 2. iCloud Authentication (one-time setup)
 
 ```bash
 docker compose run icloudpd icloudpd --username YOUR_APPLE_ID --cookie-directory /config
 ```
 
-2FA 코드를 입력하면 세션 쿠키가 저장됩니다 (~90일 유효).
+Enter the 2FA code to save the session cookie (~90 days validity).
 
-### 3. 실행
+### 3. Run
 
 ```bash
 docker compose up -d
 ```
 
-### 동작 방식
+### How It Works
 
-1. **icloudpd**: 설정된 iCloud 앨범에서 사진을 주기적으로 다운로드
-   - HEIC → JPEG 자동 변환
-   - 동영상 파일 스킵
-2. **sync-to-r2**: 다운로드된 사진을 R2에 업로드
-   - 이미지 메타데이터 (width, height, blur hash) 자동 생성
-   - 이미 업로드된 파일은 스킵
-   - 새 업로드가 있으면 GitHub Actions workflow_dispatch 트리거
+1. **icloudpd**: Periodically downloads photos from the configured iCloud album
+   - Automatic HEIC → JPEG conversion
+   - Skips video files
+2. **sync-to-r2**: Uploads downloaded photos to R2
+   - Auto-generates image metadata (width, height, blur hash)
+   - Skips already uploaded files
+   - Triggers GitHub Actions workflow_dispatch on new uploads
 
-## 환경변수
+## Environment Variables
 
-| 변수 | 필수 | 기본값 | 설명 |
-|------|------|--------|------|
-| `APPLE_ID` | O | - | iCloud 계정 이메일 |
-| `ALBUM_NAME` | O | - | 동기화할 iCloud 앨범 이름 |
-| `R2_BUCKET_NAME` | O | - | Cloudflare R2 버킷 이름 |
-| `R2_BUCKET_PREFIX` | O | - | R2 내 업로드 경로 prefix |
-| `R2_ACCESS_KEY_ID` | O | - | R2 API 액세스 키 |
-| `R2_SECRET_ACCESS_KEY` | O | - | R2 API 시크릿 키 |
-| `R2_ACCOUNT_ID` | O | - | Cloudflare 계정 ID |
-| `GITHUB_TOKEN` | - | - | GitHub PAT (`actions:write` 권한) |
-| `GITHUB_REPO` | - | - | 대상 저장소 (예: `user/repo`) |
-| `GITHUB_WORKFLOW` | - | `astro.yaml` | 트리거할 워크플로우 파일명 |
-| `SYNC_INTERVAL` | - | `7200` | R2 동기화 간격 (초) |
-| `ICLOUD_INTERVAL` | - | `3600` | iCloud 동기화 간격 (초) |
-| `TZ` | - | `Asia/Seoul` | 타임존 |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `APPLE_ID` | Yes | - | iCloud account email |
+| `ALBUM_NAME` | Yes | - | iCloud album name to sync |
+| `R2_BUCKET_NAME` | Yes | - | Cloudflare R2 bucket name |
+| `R2_BUCKET_PREFIX` | Yes | - | Upload path prefix in R2 |
+| `R2_ACCESS_KEY_ID` | Yes | - | R2 API access key |
+| `R2_SECRET_ACCESS_KEY` | Yes | - | R2 API secret key |
+| `R2_ACCOUNT_ID` | Yes | - | Cloudflare account ID |
+| `GITHUB_TOKEN` | No | - | GitHub PAT (`actions:write` scope) |
+| `GITHUB_REPO` | No | - | Target repository (e.g., `user/repo`) |
+| `GITHUB_WORKFLOW` | No | `astro.yaml` | Workflow file to trigger |
+| `SYNC_INTERVAL` | No | `7200` | R2 sync interval (seconds) |
+| `ICLOUD_INTERVAL` | No | `3600` | iCloud sync interval (seconds) |
+| `TZ` | No | `Asia/Seoul` | Timezone |
 
-## R2 이미지 메타데이터
+## R2 Image Metadata
 
-업로드 시 각 이미지의 S3 object metadata에 다음 값을 저장합니다:
+Each image's S3 object metadata stores the following values on upload:
 
 ```
-width:  이미지 너비 (px)
-height: 이미지 높이 (px)
-blur:   base64 인코딩된 blur hash (placeholder용)
+width:  Image width (px)
+height: Image height (px)
+blur:   Base64-encoded blur hash (for placeholders)
 ```
 
-EXIF orientation을 고려하여 회전된 이미지의 width/height를 올바르게 처리합니다.
+Correctly handles width/height for rotated images by accounting for EXIF orientation.
 
-## iCloud 세션 관리
+## iCloud Session Management
 
-- 세션 쿠키는 Docker volume (`icloudpd-config`)에 저장됩니다
-- 약 90일 후 만료되므로 재인증이 필요합니다
-- `docker logs icloudpd`로 세션 상태를 모니터링하세요
+- Session cookies are stored in a Docker volume (`icloudpd-config`)
+- Re-authentication is required after ~90 days when the session expires
+- Monitor session status with `docker logs icloudpd`
 
 ## License
 

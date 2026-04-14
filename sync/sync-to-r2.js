@@ -285,7 +285,7 @@ async function sync() {
 
 // --- Entry point ---
 
-console.log(`[${timestamp()}] icloud-photo-sync started`)
+console.log(`[${timestamp()}] icloud-to-r2 started`)
 console.log(`  Sync interval: ${SYNC_INTERVAL / 1000}s`)
 
 // Run immediately, then on interval
