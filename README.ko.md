@@ -41,6 +41,7 @@ docker compose up -d
    - 동영상 파일 스킵
 2. **sync-to-r2**: 다운로드된 사진을 R2에 업로드
    - 이미지 메타데이터 (width, height, blur hash) 자동 생성
+   - EXIF 촬영 날짜와 대략적인 위치 metadata를 가능한 경우 추가
    - 이미 업로드된 파일은 스킵
    - 새 업로드가 있으면 GitHub Actions workflow_dispatch 트리거
 
@@ -61,6 +62,8 @@ docker compose up -d
 | `SYNC_INTERVAL` | - | `7200` | R2 동기화 간격 (초) |
 | `ICLOUD_INTERVAL` | - | `3600` | iCloud 동기화 간격 (초) |
 | `TZ` | - | `Asia/Seoul` | 타임존 |
+| `NOMINATIM_URL` | - | `https://nominatim.openstreetmap.org/reverse` | reverse geocoding endpoint |
+| `NOMINATIM_USER_AGENT` | - | `icloud-to-r2/1.0` | Nominatim 요청 User-Agent |
 
 ## R2 이미지 메타데이터
 
@@ -70,9 +73,17 @@ docker compose up -d
 width:  이미지 너비 (px)
 height: 이미지 높이 (px)
 blur:   base64 인코딩된 blur hash (placeholder용)
+taken-date:   EXIF 촬영 날짜, 시간 제외 (YYYY-MM-DD)
+geo-country:  GPS가 있을 때 대략적인 국가명
+geo-region:   GPS가 있을 때 대략적인 지역/시도명
+geo-city:     GPS가 있을 때 대략적인 도시명
+geo-district: GPS가 있을 때 대략적인 구/군명
+geo-label:    표시용 위치명, 예: Korea, Seoul, Dongdaemun-gu
 ```
 
 EXIF orientation을 고려하여 회전된 이미지의 width/height를 올바르게 처리합니다.
+정확한 GPS 위도/경도, 고도, 속도, 방향, 촬영 시간은 저장하지 않습니다.
+누락된 metadata를 채워 넣을 때 기존 object metadata는 유지합니다.
 
 ## iCloud 세션 관리
 

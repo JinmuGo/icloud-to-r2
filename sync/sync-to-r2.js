@@ -7,6 +7,11 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3"
 import { globby } from "globby"
+import {
+  getExifDerivedMetadata,
+  mergeObjectMetadata,
+  metadataNeedsUpdate,
+} from "./metadata.js"
 import { getPlaiceholder } from "plaiceholder"
 import sharp from "sharp"
 
@@ -95,20 +100,19 @@ async function listExistingKeys() {
 }
 
 /**
- * Check if an object already has metadata (width, height, blur).
+ * Get existing object metadata from R2.
  * @param {string} key
- * @returns {Promise<boolean>}
+ * @returns {Promise<Record<string, string> | null>}
  */
-async function hasMetadata(key) {
+async function getObjectMetadata(key) {
   try {
     const head = await s3.send(
       new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: key }),
     )
-    const meta = head.Metadata ?? {}
-    return Boolean(meta.width && meta.height && meta.blur)
+    return head.Metadata ?? {}
   } catch (err) {
     if (err?.$metadata?.httpStatusCode === 404 || err?.name === "NotFound") {
-      return false
+      return null
     }
     throw err
   }
@@ -149,17 +153,41 @@ async function getImageMeta(filePath) {
   return { width: finalWidth, height: finalHeight, blur: base64, buffer }
 }
 
+/** @param {string} message */
+function warnMetadata(message) {
+  console.warn(`[${timestamp()}] ${message}`)
+}
+
 /**
  * Upload a single image to R2 with metadata.
  * @param {string} filePath - Absolute path to the local file
  * @param {string} r2Key - The R2 object key
+ * @param {Record<string, string>} [existingMetadata]
+ * @param {Record<string, string>} [exifMetadata]
  * @returns {Promise<boolean>} - Whether the upload succeeded
  */
-async function uploadImage(filePath, r2Key) {
+async function uploadImage(
+  filePath,
+  r2Key,
+  existingMetadata = {},
+  exifMetadata,
+) {
   try {
     const { width, height, blur, buffer } = await getImageMeta(filePath)
+    const resolvedExifMetadata =
+      exifMetadata ??
+      (await getExifDerivedMetadata(filePath, { warn: warnMetadata }))
+    const metadata = mergeObjectMetadata(existingMetadata, {
+      width: String(width),
+      height: String(height),
+      blur,
+      ...resolvedExifMetadata,
+    })
     const ext = path.extname(filePath).toLowerCase()
-    const contentType = ext === ".heic" ? "image/jpeg" : (CONTENT_TYPES[ext] ?? "application/octet-stream")
+    const contentType =
+      ext === ".heic"
+        ? "image/jpeg"
+        : (CONTENT_TYPES[ext] ?? "application/octet-stream")
 
     await s3.send(
       new PutObjectCommand({
@@ -167,11 +195,7 @@ async function uploadImage(filePath, r2Key) {
         Key: r2Key,
         Body: buffer,
         ContentType: contentType,
-        Metadata: {
-          width: String(width),
-          height: String(height),
-          blur,
-        },
+        Metadata: metadata,
       }),
     )
 
@@ -263,13 +287,36 @@ async function sync() {
     const r2Key = BUCKET_PREFIX ? `${BUCKET_PREFIX}/${r2Path}` : r2Path
     const absPath = path.join(PHOTOS_DIR, relPath)
 
-    // Skip if already exists with metadata
-    if (existingKeys.has(r2Key) && (await hasMetadata(r2Key))) {
-      skipCount++
-      continue
+    const existingMetadata = existingKeys.has(r2Key)
+      ? await getObjectMetadata(r2Key)
+      : null
+    let exifMetadata
+
+    // Skip existing objects only when their preserved metadata is complete.
+    if (existingMetadata) {
+      exifMetadata = await getExifDerivedMetadata(absPath, {
+        warn: warnMetadata,
+      })
+
+      const expectedMetadata = {
+        width: existingMetadata.width,
+        height: existingMetadata.height,
+        blur: existingMetadata.blur,
+        ...exifMetadata,
+      }
+
+      if (!metadataNeedsUpdate(existingMetadata, expectedMetadata)) {
+        skipCount++
+        continue
+      }
     }
 
-    const ok = await uploadImage(absPath, r2Key)
+    const ok = await uploadImage(
+      absPath,
+      r2Key,
+      existingMetadata ?? {},
+      exifMetadata,
+    )
     if (ok) uploadCount++
   }
 
